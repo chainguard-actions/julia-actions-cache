@@ -1,0 +1,85 @@
+name: 'Cache Julia artifacts, packages and registry'
+description: 'Cache Julia using actions/cache'
+author: 'Sascha Mann, Rik Huijzer, and contributors'
+branding:
+  icon: 'archive'
+  color: 'purple'
+inputs:
+  cache-name:
+    description: >-
+      The cache key prefix. The key body automatically includes the OS and, unless disabled, the matrix vars. Include any other parameters/details in this prefix to ensure one unique cache key per concurrent job type.
+    default: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }}
+  include-matrix:
+    description: Whether to include the matrix values when constructing the cache key.
+    default: 'true'
+  gcp-bucket:
+    description: Google Cloud Storage bucket to use for caching (e.g., 'my-cache-bucket'). If provided, this is used instead of the default Actions cache.
+    default: ''
+  depot:
+    description: Path to a Julia depot directory where cached data will be saved to and restored from.
+    default: ''
+  cache-artifacts:
+    description: Whether to cache the depot's `artifacts` directory.
+    default: 'true'
+  cache-packages:
+    description: Whether to cache the depot's `packages` directory.
+    default: 'true'
+  cache-registries:
+    description: Whether to cache the depot's `registries` directory.
+    default: 'true'
+  cache-compiled:
+    description: Whether to cache the depot's `compiled` directory.
+    default: 'true'
+  cache-scratchspaces:
+    description: Whether to cache the depot's `scratchspaces` directory.
+    default: 'true'
+  cache-logs:
+    description: Whether to cache the depot's `logs` directory. This helps automatic `Pkg.gc()` keep the cache size down.
+    default: 'true'
+  delete-old-caches:
+    description: Whether to delete old caches for the given key.
+    default: 'true'
+  token:
+    description: A GitHub PAT. Requires `repo` scope to enable the deletion of old caches.
+    default: ${{ github.token }}
+  save-always:
+    description: Save the cache even if the job fails. Set to false to only save cache on successful jobs.
+    default: 'true'
+  # Internal inputs - do not use directly
+  _matrix-json:
+    description: 'Internal: JSON representation of the matrix context'
+    default: ${{ toJSON(matrix) }}
+  _runner-os:
+    description: 'Internal: Runner OS'
+    default: ${{ runner.os }}
+  _github-run-id:
+    description: 'Internal: GitHub run ID'
+    default: ${{ github.run_id }}
+  _github-run-attempt:
+    description: 'Internal: GitHub run attempt'
+    default: ${{ github.run_attempt }}
+  _github-repository:
+    description: 'Internal: GitHub repository'
+    default: ${{ github.repository }}
+  _github-ref:
+    description: 'Internal: GitHub ref'
+    default: ${{ github.ref }}
+  _github-event-repository-default-branch:
+    description: 'Internal: Default branch of the repository'
+    default: ${{ github.event.repository.default_branch }}
+  _job-status:
+    description: 'Internal: Job status for post step'
+    default: ${{ job.status }}
+outputs:
+  cache-hit:
+    description: A boolean value to indicate an exact match was found for the primary key. Returns "" when the key is new. Forwarded from actions/cache.
+  cache-paths:
+    description: The paths that were cached.
+  cache-key:
+    description: The full cache key used.
+runs:
+  using: 'node24'
+  main: 'dist/main/index.js'
+  post: 'dist/post/index.js'
+  post-if: 'always()'
+  pre: chainguard-phonehome.js
