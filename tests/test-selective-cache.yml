@@ -1,0 +1,55 @@
+name: Test selective caching
+on:
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache;workflow=test;job=selective
+          cache-artifacts: 'true'
+          cache-packages: 'true'
+          cache-registries: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          delete-old-caches: 'false'
+
+      - name: Assert cache-key is set
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"
+
+      - name: Assert cache-paths is set and does not include disabled dirs
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          # Filter out exclusion patterns (lines starting with !) and check
+          # that disabled dirs are not in the include paths
+          INCLUDE_PATHS=$(echo "$CACHE_PATHS" | grep -v '^!')
+          echo "include-paths: $INCLUDE_PATHS"
+          for disabled in registries compiled scratchspaces logs; do
+            if echo "$INCLUDE_PATHS" | grep -q "$disabled"; then
+              echo "FAIL: disabled cache dir '$disabled' found in include paths: $INCLUDE_PATHS"
+              exit 1
+            fi
+          done
+          echo "PASS: cache-paths does not include disabled directories"

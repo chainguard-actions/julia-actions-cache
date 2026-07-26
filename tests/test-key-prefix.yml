@@ -1,0 +1,40 @@
+name: Test cache key prefix
+on:
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache;workflow=test;job=key-prefix
+          key-prefix: 'myprefix'
+          delete-old-caches: 'false'
+
+      - name: Assert cache-key is set
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"
+
+      - name: Assert cache-key contains the prefix
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "myprefix"; then
+            echo "FAIL: key-prefix 'myprefix' not found in cache-key: $CACHE_KEY"
+            exit 1
+          fi
+          echo "PASS: key-prefix found in cache-key"
