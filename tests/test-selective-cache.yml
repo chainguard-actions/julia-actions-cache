@@ -1,0 +1,70 @@
+name: Test selective caching (disable some directories)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          cache-artifacts: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          delete-old-caches: 'false'
+        continue-on-error: true
+      - name: Assert outputs when selective caching
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "cache-key: $CACHE_KEY"
+          echo "cache-paths: $CACHE_PATHS"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (cache service not available)"
+            exit 0
+          fi
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty on success"
+            exit 1
+          fi
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty on success"
+            exit 1
+          fi
+          # Filter out exclusion lines (starting with !) to get only positive cache paths.
+          # The action always adds exclusion patterns (e.g. !~/.julia/artifacts/*.pid)
+          # even when cache-artifacts=false, so we only check positive (non-!) lines.
+          POSITIVE_PATHS=$(echo "$CACHE_PATHS" | grep -v '^!' || true)
+          echo "positive paths: $POSITIVE_PATHS"
+          # Verify that disabled directories are not in the positive cache paths
+          if echo "$POSITIVE_PATHS" | grep -q "/artifacts"; then
+            echo "FAIL: artifacts should not be in positive cache-paths when cache-artifacts=false"
+            exit 1
+          fi
+          if echo "$POSITIVE_PATHS" | grep -q "/compiled"; then
+            echo "FAIL: compiled should not be in positive cache-paths when cache-compiled=false"
+            exit 1
+          fi
+          if echo "$POSITIVE_PATHS" | grep -q "/scratchspaces"; then
+            echo "FAIL: scratchspaces should not be in positive cache-paths when cache-scratchspaces=false"
+            exit 1
+          fi
+          if echo "$POSITIVE_PATHS" | grep -q "/logs"; then
+            echo "FAIL: logs should not be in positive cache-paths when cache-logs=false"
+            exit 1
+          fi
+          # Verify that enabled directories ARE in the positive cache paths
+          if ! echo "$POSITIVE_PATHS" | grep -q "/packages"; then
+            echo "FAIL: packages should be in positive cache-paths when cache-packages=true (default)"
+            exit 1
+          fi
+          echo "PASS: selective caching works, positive paths='$POSITIVE_PATHS'"

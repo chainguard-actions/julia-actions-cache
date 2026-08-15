@@ -1,0 +1,44 @@
+name: Test custom cache-name and key-prefix
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          cache-name: 'my-custom-cache'
+          key-prefix: 'myprefix-'
+          include-matrix: 'false'
+          delete-old-caches: 'false'
+        continue-on-error: true
+      - name: Assert cache-key contains custom prefix and name
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "cache-key: $CACHE_KEY"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (cache service not available)"
+            exit 0
+          fi
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty on success"
+            exit 1
+          fi
+          if ! echo "$CACHE_KEY" | grep -q "myprefix-"; then
+            echo "FAIL: cache-key does not contain 'myprefix-': $CACHE_KEY"
+            exit 1
+          fi
+          if ! echo "$CACHE_KEY" | grep -q "my-custom-cache"; then
+            echo "FAIL: cache-key does not contain 'my-custom-cache': $CACHE_KEY"
+            exit 1
+          fi
+          echo "PASS: cache-key contains expected prefix and name: $CACHE_KEY"

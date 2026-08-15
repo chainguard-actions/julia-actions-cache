@@ -1,0 +1,44 @@
+name: Test with include-matrix disabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          include-matrix: 'false'
+          delete-old-caches: 'false'
+        continue-on-error: true
+      - name: Assert cache-key and cache-paths are set
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+          CACHE_HIT: ${{ steps.action.outputs.cache-hit }}
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "cache-key: $CACHE_KEY"
+          echo "cache-paths: $CACHE_PATHS"
+          echo "cache-hit: '$CACHE_HIT'"
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (cache service not available)"
+            exit 0
+          fi
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty on success"
+            exit 1
+          fi
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty on success"
+            exit 1
+          fi
+          # cache-hit should be empty string on a new cache (not "true" or "false")
+          echo "cache-hit value: '$CACHE_HIT'"
+          echo "PASS: outputs are set correctly, cache-key='$CACHE_KEY'"

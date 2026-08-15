@@ -1,0 +1,30 @@
+{
+  "name": "julia-cache",
+  "version": "3.0.0",
+  "type": "module",
+  "description": "Cache Julia artifacts, packages and registry",
+  "main": "dist/main/index.js",
+  "scripts": {
+    "build": "npm run typecheck && ncc build src/main.ts -o dist/main && ncc build src/post.ts -o dist/post",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "keywords": [
+    "julia",
+    "cache",
+    "github-actions"
+  ],
+  "author": "Sascha Mann, Rik Huijzer, and contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/cache": "^6.1.0",
+    "@actions/core": "^3.0.0",
+    "@actions/exec": "^3.0.0",
+    "@google-cloud/storage": "^7.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@vercel/ncc": "^0.44.0",
+    "typescript": "^5.9.3"
+  }
+}

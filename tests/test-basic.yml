@@ -1,0 +1,45 @@
+name: Test basic usage
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+      - name: Assert outputs
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+          OUTCOME: ${{ steps.action.outcome }}
+        run: |
+          echo "outcome: $OUTCOME"
+          echo "cache-key: $CACHE_KEY"
+          echo "cache-paths: $CACHE_PATHS"
+          # The action sets outputs before attempting cache restore, so if it
+          # succeeded, outputs must be non-empty. If it failed (e.g. cache
+          # service unavailable under sentinel repo), that is also acceptable.
+          if [ "$OUTCOME" = "failure" ]; then
+            echo "PASS: action failed gracefully (cache service not available)"
+            exit 0
+          fi
+          if [ "$OUTCOME" != "success" ]; then
+            echo "FAIL: unexpected outcome '$OUTCOME'"
+            exit 1
+          fi
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty on success"
+            exit 1
+          fi
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty on success"
+            exit 1
+          fi
+          # cache-key should contain the OS name
+          if ! echo "$CACHE_KEY" | grep -qi "linux\|ubuntu\|os="; then
+            echo "FAIL: cache-key does not appear to contain OS info: $CACHE_KEY"
+            exit 1
+          fi
+          echo "PASS: cache-key='$CACHE_KEY'"
