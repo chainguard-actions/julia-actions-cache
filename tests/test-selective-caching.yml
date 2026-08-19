@@ -1,0 +1,69 @@
+name: Test selective caching (disable some directories)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          cache-name: julia-cache-test-selective
+          depot: /tmp/julia-depot-selective
+          cache-artifacts: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          cache-packages: 'true'
+          cache-registries: 'true'
+      - name: Assert cache-paths contains packages
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if ! echo "$CACHE_PATHS" | grep -q "packages"; then
+            echo "FAIL: cache-paths should contain 'packages'"
+            exit 1
+          fi
+          echo "PASS: cache-paths contains packages"
+      - name: Assert cache-paths does not contain artifacts
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "artifacts"; then
+            echo "FAIL: cache-paths should NOT contain 'artifacts' (it was disabled)"
+            exit 1
+          fi
+          echo "PASS: cache-paths does not contain artifacts"
+      - name: Assert cache-paths does not contain compiled
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "compiled"; then
+            echo "FAIL: cache-paths should NOT contain 'compiled' (it was disabled)"
+            exit 1
+          fi
+          echo "PASS: cache-paths does not contain compiled"
+      - name: Assert cache-paths does not contain scratchspaces
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "scratchspaces"; then
+            echo "FAIL: cache-paths should NOT contain 'scratchspaces' (it was disabled)"
+            exit 1
+          fi
+          echo "PASS: cache-paths does not contain scratchspaces"
+      - name: Assert cache-paths does not contain logs
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "logs"; then
+            echo "FAIL: cache-paths should NOT contain 'logs' (it was disabled)"
+            exit 1
+          fi
+          echo "PASS: cache-paths does not contain logs"

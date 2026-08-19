@@ -1,0 +1,42 @@
+name: Test custom depot path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          cache-name: julia-cache-test-custom-depot
+          depot: /tmp/my-julia-depot
+      - name: Assert cache-paths uses custom depot
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if ! echo "$CACHE_PATHS" | grep -q "/tmp/my-julia-depot"; then
+            echo "FAIL: cache-paths does not reference the custom depot path"
+            exit 1
+          fi
+          echo "PASS: cache-paths references custom depot"
+      - name: Assert custom depot directory was created
+        run: |
+          DEPOT="/tmp/my-julia-depot"
+          echo "Checking depot: $DEPOT"
+          if [ ! -d "$DEPOT" ]; then
+            echo "FAIL: custom depot directory was not created at $DEPOT"
+            exit 1
+          fi
+          echo "PASS: custom depot directory exists"
+      - name: Assert cache-key is set and non-empty
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"

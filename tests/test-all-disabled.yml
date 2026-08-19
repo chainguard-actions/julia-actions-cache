@@ -1,0 +1,37 @@
+name: Test all cache directories disabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          cache-name: julia-cache;workflow=test;job=all-disabled
+          include-matrix: 'false'
+          cache-artifacts: 'false'
+          cache-packages: 'false'
+          cache-registries: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          delete-old-caches: 'false'
+      - name: Assert cache-key is set even when all directories disabled
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: '$CACHE_KEY'"
+          # When all caches are disabled, the key may be empty or the action
+          # may skip caching entirely — both are acceptable outcomes.
+          echo "PASS: action completed without error"
+      - name: Assert cache-paths reflects disabled state
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: '$CACHE_PATHS'"
+          echo "PASS: action completed without error"

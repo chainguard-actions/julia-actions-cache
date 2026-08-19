@@ -1,0 +1,449 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'action.yml'
+      - 'handle_caches.jl'
+      - 'src/**'
+      - 'dist/**'
+      - '.github/**'
+  pull_request:
+    paths:
+      - 'action.yml'
+      - 'handle_caches.jl'
+      - 'src/**'
+      - 'dist/**'
+      - '.github/**'
+
+# needed to allow julia-actions/cache to delete old caches that it has created
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check-dist:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+    - uses: actions/setup-node@395ad3262231945c25e8478fd5baf05154b1d79f # v6.1.0
+      with:
+        node-version: '24'
+    - run: npm ci
+    - run: npm run build
+    - name: Check dist is up to date
+      run: |
+        if [ -n "$(git status --porcelain dist/)" ]; then
+          echo "::error::dist/ is out of date. Run 'npm run build' and commit the changes."
+          git diff dist/
+          exit 1
+        fi
+
+  generate-prefix:
+    runs-on: ubuntu-latest
+    outputs:
+      cache-prefix: ${{ steps.name.outputs.cache-prefix }}
+    steps:
+    - name: Generate random cache-prefix
+      id: name
+      run: |
+        cache_prefix=$(head -n 100 </dev/urandom | shasum -a 256 | cut -d ' ' -f 1)
+        echo "cache-prefix=$cache_prefix" >>"$GITHUB_OUTPUT"
+
+  test-save:
+    needs: generate-prefix
+    runs-on: ${{ matrix.os }}
+    outputs:
+      cache-name: ${{ steps.cache-name.outputs.cache-name }}
+    strategy:
+      matrix:
+        nested:
+          - name: matrix
+            invalid-chars: ","  # Use invalid characters in job matrix to ensure we escape them
+        version:
+          - "1.0"
+          - "1"
+          - "nightly"
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macOS-latest
+        exclude:
+          # Test Julia "1.0" on Linux only
+          - version: "1.0"
+            os: windows-latest
+          - version: "1.0"
+            os: macOS-latest
+      fail-fast: false
+    env:
+      JULIA_DEPOT_PATH: /tmp/julia-depot
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Set cache-name
+      id: cache-name
+      shell: bash
+      env:
+        CACHE_PREFIX: ${{ needs.generate-prefix.outputs.cache-prefix }}
+        JOB_NAME: ${{ github.job }}
+      run: |
+        safe_prefix=$(printf '%s' "$CACHE_PREFIX" | tr -d '\n\r')
+        safe_job=$(printf '%s' "$JOB_NAME" | tr -d '\n\r')
+        echo "cache-name=${safe_prefix}-${safe_job}" >>"$GITHUB_OUTPUT"
+    - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2
+      with:
+        version: ${{ matrix.version }}
+    - name: Save cache
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ steps.cache-name.outputs.cache-name }}
+        delete-old-caches: required
+    - name: Check no artifacts dir
+      shell: julia --color=yes {0}
+      run: |
+        dir = joinpath(first(DEPOT_PATH), "artifacts")
+        @assert !isdir(dir)
+    - name: Install a small binary
+      shell: julia --color=yes {0}
+      run: |
+        using Pkg
+        if VERSION >= v"1.3"
+            Pkg.add(PackageSpec(name="pandoc_jll", version="3"))
+        else
+            Pkg.add(PackageSpec(name="Scratch", version="1"))
+            using Scratch
+            get_scratch!("test")
+        end
+
+  test-restore:
+    needs: test-save
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        nested:
+          - name: matrix
+            invalid-chars: ","  # Use invalid characters in job matrix to ensure we escape them
+        version:
+          - "1.0"
+          - "1"
+          - "nightly"
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macOS-latest
+        exclude:
+          # Test Julia "1.0" on Linux only
+          - version: "1.0"
+            os: windows-latest
+          - version: "1.0"
+            os: macOS-latest
+      fail-fast: false
+    env:
+      JULIA_DEPOT_PATH: /tmp/julia-depot
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2
+      with:
+        version: ${{ matrix.version }}
+    - name: Restore cache
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ needs.test-save.outputs.cache-name }}
+        # Cannot require a successful cache delete on forked PRs as the permissions for actions is limited to read
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: Test cache-hit output
+      shell: julia --color=yes {0}
+      run: |
+        @show ENV["cache-hit"]
+        @assert ENV["cache-hit"] == "true"
+      env:
+        cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    - name: Check existance or emptiness of affected dirs
+      shell: julia --color=yes {0}
+      run: |
+        # These dirs should exist as they've been cached
+        artifacts_dir = joinpath(first(DEPOT_PATH), "artifacts")
+        if VERSION >= v"1.3"
+            @assert !isempty(readdir(artifacts_dir))
+        else
+            @assert !isdir(artifacts_dir)
+        end
+        packages_dir = joinpath(first(DEPOT_PATH), "packages")
+        @assert !isempty(readdir(packages_dir))
+        compiled_dir = joinpath(first(DEPOT_PATH), "compiled")
+        @assert !isempty(readdir(compiled_dir))
+        scratchspaces_dir = joinpath(first(DEPOT_PATH), "scratchspaces")
+        @assert !isempty(readdir(scratchspaces_dir))
+        logs_dir = joinpath(first(DEPOT_PATH), "logs")
+        @assert !isempty(readdir(logs_dir))
+
+  # Do tests with no matrix also given the matrix is auto-included in cache key
+  test-save-nomatrix:
+    needs: generate-prefix
+    runs-on: ubuntu-latest
+    outputs:
+      cache-name: ${{ steps.cache-name.outputs.cache-name }}
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Set cache-name
+      id: cache-name
+      env:
+        CACHE_PREFIX: ${{ needs.generate-prefix.outputs.cache-prefix }}
+        JOB_NAME: ${{ github.job }}
+      run: |
+        safe_prefix=$(printf '%s' "$CACHE_PREFIX" | tr -d '\n\r')
+        safe_job=$(printf '%s' "$JOB_NAME" | tr -d '\n\r')
+        echo "cache-name=${safe_prefix}-${safe_job}" >>"$GITHUB_OUTPUT"
+    - name: Save cache
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ steps.cache-name.outputs.cache-name }}
+        delete-old-caches: required
+    - name: Check no artifacts dir
+      shell: julia --color=yes {0}
+      run: |
+        dir = joinpath(first(DEPOT_PATH), "artifacts")
+        @assert !isdir(dir)
+    - name: Install a small binary
+      shell: julia --color=yes {0}
+      run: |
+        using Pkg
+        if VERSION >= v"1.3"
+            Pkg.add(PackageSpec(name="pandoc_jll", version="3"))
+        else
+            Pkg.add(PackageSpec(name="Scratch", version="1"))
+            using Scratch
+            get_scratch!("test")
+        end
+
+  test-restore-nomatrix:
+    needs: test-save-nomatrix
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Restore cache
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ needs.test-save-nomatrix.outputs.cache-name }}
+        # Cannot require a successful cache delete on forked PRs as the permissions for actions is limited to read
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: Test cache-hit output
+      shell: julia --color=yes {0}
+      run: |
+        @show ENV["cache-hit"]
+        @assert ENV["cache-hit"] == "true"
+      env:
+        cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    - name: Check existance or emptiness of affected dirs
+      shell: julia --color=yes {0}
+      run: |
+        # These dirs should exist as they've been cached
+        artifacts_dir = joinpath(first(DEPOT_PATH), "artifacts")
+        if VERSION >= v"1.3"
+            @assert !isempty(readdir(artifacts_dir))
+        else
+            @assert !isdir(artifacts_dir)
+        end
+        packages_dir = joinpath(first(DEPOT_PATH), "packages")
+        @assert !isempty(readdir(packages_dir))
+        compiled_dir = joinpath(first(DEPOT_PATH), "compiled")
+        @assert !isempty(readdir(compiled_dir))
+        scratchspaces_dir = joinpath(first(DEPOT_PATH), "scratchspaces")
+        @assert !isempty(readdir(scratchspaces_dir))
+        logs_dir = joinpath(first(DEPOT_PATH), "logs")
+        @assert !isempty(readdir(logs_dir))
+
+  test-save-cloned-registry:
+    needs: generate-prefix
+    runs-on: ubuntu-latest
+    outputs:
+      cache-name: ${{ steps.cache-name.outputs.cache-name }}
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Set cache-name
+      id: cache-name
+      env:
+        CACHE_PREFIX: ${{ needs.generate-prefix.outputs.cache-prefix }}
+        JOB_NAME: ${{ github.job }}
+      run: |
+        safe_prefix=$(printf '%s' "$CACHE_PREFIX" | tr -d '\n\r')
+        safe_job=$(printf '%s' "$JOB_NAME" | tr -d '\n\r')
+        echo "cache-name=${safe_prefix}-${safe_job}" >>"$GITHUB_OUTPUT"
+    - name: Save cache
+      uses: ./
+      with:
+        cache-name: ${{ steps.cache-name.outputs.cache-name }}
+        # Cannot require a successful cache delete on forked PRs as the permissions for actions is limited to read
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: Add General registry clone
+      shell: julia --color=yes {0}
+      run: |
+        using Pkg
+        Pkg.Registry.add("General")
+      env:
+        JULIA_PKG_SERVER: ""
+    # Set the registry worktree to an older state to simulate the cache storing an old version of the registry.
+    - name: Use outdated General worktree
+      run: git -C ~/.julia/registries/General reset --hard HEAD~20
+
+  test-restore-cloned-registry:
+    needs: test-save-cloned-registry
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+    - name: Add General registry clone
+      shell: julia --color=yes {0}
+      run: |
+        using Pkg
+        Pkg.Registry.add("General")
+      env:
+        JULIA_PKG_SERVER: ""
+    - name: Restore cache
+      uses: ./
+      with:
+        cache-name: ${{ needs.test-save-cloned-registry.outputs.cache-name }}
+        # Cannot require a successful cache delete on forked PRs as the permissions for actions is limited to read
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: Test registry is not corrupt
+      shell: julia --color=yes {0}
+      run: |
+        using Pkg
+        Pkg.Registry.update()
+
+  # Test that cache is saved even when job fails (default behavior with save-always: true)
+  test-save-on-failure:
+    name: "[SUPPOSED TO FAIL] test-save-on-failure"
+    needs: generate-prefix
+    runs-on: ubuntu-latest
+    outputs:
+      cache-name: ${{ steps.cache-name.outputs.cache-name }}
+    steps:
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+    - name: Set cache-name
+      id: cache-name
+      env:
+        CACHE_PREFIX: ${{ needs.generate-prefix.outputs.cache-prefix }}
+        JOB_NAME: ${{ github.job }}
+      run: |
+        safe_prefix=$(printf '%s' "$CACHE_PREFIX" | tr -d '\n\r')
+        safe_job=$(printf '%s' "$JOB_NAME" | tr -d '\n\r')
+        echo "cache-name=${safe_prefix}-${safe_job}" >>"$GITHUB_OUTPUT"
+    - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2
+      with:
+        version: "1"
+    - name: Save cache (save-always is true by default)
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ steps.cache-name.outputs.cache-name }}
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: Install a package to populate cache
+      shell: julia --color=yes {0}
+      run: |
+        using Pkg
+        Pkg.add(PackageSpec(name="Example", version="0.5"))
+    - name: Force failure to test save-on-failure
+      run: |
+        echo "This job is intended to fail, as it is part of a test which checks that this action successfully caches Julia dependencies even when a job fails. Due to existing limitations in GitHub's UI it is not possible to mark this job as being expected to fail, or to mark CI as passing overall."
+        exit 1
+
+  test-restore-after-failure:
+    needs: test-save-on-failure
+    # Always run this job even if the previous job fails (which it will)
+    if: always() && needs.test-save-on-failure.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+    - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2
+      with:
+        version: "1"
+    - name: Restore cache saved despite failure
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ needs.test-save-on-failure.outputs.cache-name }}
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: Test cache was restored (save-always default worked)
+      shell: julia --color=yes {0}
+      run: |
+        @show ENV["cache-hit"]
+        # Cache should have been saved despite the failure (save-always: true is default)
+        @assert ENV["cache-hit"] == "true" "Cache should have been saved even though the job failed"
+      env:
+        cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    - name: Check Example package was cached
+      shell: julia --color=yes {0}
+      run: |
+        packages_dir = joinpath(first(DEPOT_PATH), "packages")
+        @assert isdir(joinpath(packages_dir, "Example")) "Example package should be in cache"
+
+  # Test that cache is NOT saved when job fails and save-always: false
+  test-no-save-on-failure:
+    name: "[SUPPOSED TO FAIL] test-no-save-on-failure"
+    needs: generate-prefix
+    runs-on: ubuntu-latest
+    outputs:
+      cache-name: ${{ steps.cache-name.outputs.cache-name }}
+    steps:
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+    - name: Set cache-name
+      id: cache-name
+      env:
+        CACHE_PREFIX: ${{ needs.generate-prefix.outputs.cache-prefix }}
+        JOB_NAME: ${{ github.job }}
+      run: |
+        safe_prefix=$(printf '%s' "$CACHE_PREFIX" | tr -d '\n\r')
+        safe_job=$(printf '%s' "$JOB_NAME" | tr -d '\n\r')
+        echo "cache-name=${safe_prefix}-${safe_job}" >>"$GITHUB_OUTPUT"
+    - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2
+      with:
+        version: "1"
+    - name: Save cache with save-always disabled
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ steps.cache-name.outputs.cache-name }}
+        save-always: false
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: Install a package to populate cache
+      shell: julia --color=yes {0}
+      run: |
+        using Pkg
+        Pkg.add(PackageSpec(name="Example", version="0.5"))
+    - name: Force failure to test no-save-on-failure
+      run: exit 1
+
+  test-no-restore-after-failure:
+    needs: test-no-save-on-failure
+    # Always run this job even if the previous job fails (which it will)
+    if: always() && needs.test-no-save-on-failure.result == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+    - uses: julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2
+      with:
+        version: "1"
+    - name: Try to restore cache (should not exist)
+      id: cache
+      uses: ./
+      with:
+        cache-name: ${{ needs.test-no-save-on-failure.outputs.cache-name }}
+        delete-old-caches: ${{ github.event.pull_request.head.repo.fork && 'false' || 'required' }}
+    - name: "Test cache was NOT restored (save-always: false worked)"
+      shell: julia --color=yes {0}
+      run: |
+        @show ENV["cache-hit"]
+        # Cache should NOT have been saved because save-always: false and job failed
+        @assert ENV["cache-hit"] == "" "Cache should NOT have been saved when save-always: false and job failed"
+      env:
+        cache-hit: ${{ steps.cache.outputs.cache-hit }}
+    - name: Check Example package was NOT cached
+      shell: julia --color=yes {0}
+      run: |
+        packages_dir = joinpath(first(DEPOT_PATH), "packages")
+        @assert !isdir(joinpath(packages_dir, "Example")) "Example package should NOT be in cache"

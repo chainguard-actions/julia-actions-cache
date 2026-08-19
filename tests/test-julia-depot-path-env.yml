@@ -1,0 +1,44 @@
+name: Test JULIA_DEPOT_PATH environment variable
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      JULIA_DEPOT_PATH: /tmp/env-julia-depot:/tmp/second-depot
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        with:
+          cache-name: julia-cache-test-env-depot
+          # No depot input — should pick up JULIA_DEPOT_PATH from environment
+      - name: Assert cache-paths uses first entry from JULIA_DEPOT_PATH
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if ! echo "$CACHE_PATHS" | grep -q "/tmp/env-julia-depot"; then
+            echo "FAIL: cache-paths does not reference the first JULIA_DEPOT_PATH entry"
+            exit 1
+          fi
+          echo "PASS: cache-paths references first JULIA_DEPOT_PATH entry"
+      - name: Assert cache-paths does not use second depot entry
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "/tmp/second-depot"; then
+            echo "FAIL: cache-paths should only use the FIRST entry from JULIA_DEPOT_PATH"
+            exit 1
+          fi
+          echo "PASS: cache-paths uses only the first depot entry"
+      - name: Assert depot directory was created
+        run: |
+          DEPOT="/tmp/env-julia-depot"
+          echo "Checking depot: $DEPOT"
+          if [ ! -d "$DEPOT" ]; then
+            echo "FAIL: depot directory was not created at $DEPOT"
+            exit 1
+          fi
+          echo "PASS: depot directory exists"
