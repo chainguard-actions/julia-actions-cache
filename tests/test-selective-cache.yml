@@ -1,0 +1,59 @@
+name: Test selective caching (disable some directories)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Node.js 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          node --version
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache;workflow=test-selective;job=selective
+          cache-artifacts: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          cache-packages: 'true'
+          cache-registries: 'true'
+          delete-old-caches: 'false'
+      - name: Assert cache-key is non-empty
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is non-empty"
+      - name: Assert cache-paths reflects enabled directories only
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          # artifacts should NOT be in paths since cache-artifacts=false
+          if echo "$CACHE_PATHS" | grep -q "^[^!].*artifacts"; then
+            echo "FAIL: 'artifacts' found in cache-paths but cache-artifacts=false"
+            exit 1
+          fi
+          # compiled should NOT be in paths since cache-compiled=false
+          if echo "$CACHE_PATHS" | grep -q "^[^!].*compiled"; then
+            echo "FAIL: 'compiled' found in cache-paths but cache-compiled=false"
+            exit 1
+          fi
+          # packages SHOULD be in paths since cache-packages=true
+          if ! echo "$CACHE_PATHS" | grep -q "packages"; then
+            echo "FAIL: 'packages' not found in cache-paths but cache-packages=true"
+            exit 1
+          fi
+          echo "PASS: cache-paths reflects enabled directories"

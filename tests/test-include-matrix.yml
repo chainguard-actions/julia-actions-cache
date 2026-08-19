@@ -1,0 +1,60 @@
+name: Test include-matrix disabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/main
+      GITHUB_EVENT_NAME: push
+      RUNNER_OS: Linux
+      GITHUB_RUN_ID: '12345'
+      GITHUB_RUN_ATTEMPT: '1'
+      GITHUB_REPOSITORY: julia-actions/cache
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action-no-matrix
+        uses: .
+        with:
+          cache-name: julia-cache;workflow=test;job=matrix-test
+          include-matrix: 'false'
+          delete-old-caches: 'false'
+          token: ${{ github.token }}
+          _runner-os: Linux
+          _github-run-id: '12345'
+          _github-run-attempt: '1'
+          _github-repository: julia-actions/cache
+          _github-ref: refs/heads/main
+          _github-event-repository-default-branch: main
+      - name: Assert cache-key is set when matrix disabled
+        env:
+          CACHE_KEY: ${{ steps.action-no-matrix.outputs.cache-key }}
+        run: |
+          echo "cache-key (no matrix): $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"
+      - name: Assert cache-key contains cache-name prefix
+        env:
+          CACHE_KEY: ${{ steps.action-no-matrix.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if echo "$CACHE_KEY" | grep -q "julia-cache;workflow=test;job=matrix-test"; then
+            echo "PASS: cache-key contains the expected cache-name prefix"
+          else
+            echo "FAIL: cache-key does not contain expected prefix 'julia-cache;workflow=test;job=matrix-test'"
+            exit 1
+          fi
+      - name: Assert cache-key contains OS
+        env:
+          CACHE_KEY: ${{ steps.action-no-matrix.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if echo "$CACHE_KEY" | grep -qi "linux\|ubuntu\|os="; then
+            echo "PASS: cache-key contains OS information"
+          else
+            echo "FAIL: cache-key does not appear to contain OS information"
+            exit 1
+          fi

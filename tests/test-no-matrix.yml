@@ -1,0 +1,46 @@
+name: Test include-matrix disabled
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Node.js 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          node --version
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache;workflow=test-no-matrix;job=no-matrix
+          include-matrix: 'false'
+          delete-old-caches: 'false'
+      - name: Assert cache-key is non-empty
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is non-empty"
+      - name: Assert cache-paths includes all default directories
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          # All default directories should be present
+          for dir in packages registries artifacts compiled scratchspaces logs; do
+            if ! echo "$CACHE_PATHS" | grep -q "$dir"; then
+              echo "FAIL: '$dir' not found in cache-paths"
+              exit 1
+            fi
+          done
+          echo "PASS: all default directories present in cache-paths"

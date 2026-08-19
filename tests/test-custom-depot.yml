@@ -1,0 +1,51 @@
+name: Test custom depot path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install Node.js 24
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          node --version
+      - name: Create custom depot directory structure
+        run: |
+          mkdir -p /tmp/julia-depot/packages
+          mkdir -p /tmp/julia-depot/registries
+          mkdir -p /tmp/julia-depot/artifacts
+          mkdir -p /tmp/julia-depot/compiled
+          mkdir -p /tmp/julia-depot/scratchspaces
+          mkdir -p /tmp/julia-depot/logs
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache;workflow=test-depot;job=custom-depot
+          depot: /tmp/julia-depot
+          delete-old-caches: 'false'
+      - name: Assert cache-key is non-empty
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is non-empty"
+      - name: Assert cache-paths references custom depot
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          if ! echo "$CACHE_PATHS" | grep -q "/tmp/julia-depot"; then
+            echo "FAIL: cache-paths does not reference custom depot '/tmp/julia-depot'"
+            exit 1
+          fi
+          echo "PASS: cache-paths references custom depot"
