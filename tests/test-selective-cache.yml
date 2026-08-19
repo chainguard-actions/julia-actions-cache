@@ -1,0 +1,74 @@
+name: Test selective cache options
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          cache-name: julia-cache;workflow=test;job=selective
+          cache-artifacts: 'false'
+          cache-packages: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          cache-registries: 'true'
+      - name: Assert cache-key output is set
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"
+      - name: Assert cache-paths output is set
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-paths is set"
+      - name: Assert cache-paths does not include artifacts
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # The exclusion patterns (starting with !) still reference artifacts, so we check
+          # that the positive (non-excluded) artifacts path is not present.
+          # The positive path would be like ~/.julia/artifacts (without leading !)
+          if echo "$CACHE_PATHS" | grep -v '^!' | grep -q "artifacts"; then
+            echo "FAIL: cache-paths should not include artifacts (positive path) when cache-artifacts=false"
+            exit 1
+          fi
+          echo "PASS: artifacts positive path not in cache-paths as expected"
+      - name: Assert cache-paths does not include packages
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # Check that the positive (non-excluded) packages path is not present.
+          if echo "$CACHE_PATHS" | grep -v '^!' | grep -q "packages"; then
+            echo "FAIL: cache-paths should not include packages (positive path) when cache-packages=false"
+            exit 1
+          fi
+          echo "PASS: packages positive path not in cache-paths as expected"
+      - name: Assert cache-paths includes registries
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # Check that the positive (non-excluded) registries path is present.
+          if ! echo "$CACHE_PATHS" | grep -v '^!' | grep -q "registries"; then
+            echo "FAIL: cache-paths should include registries when cache-registries=true"
+            exit 1
+          fi
+          echo "PASS: registries path found in cache-paths as expected"

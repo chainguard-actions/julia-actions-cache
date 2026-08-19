@@ -1,0 +1,44 @@
+name: Test save-always false (save only on success)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: action
+        uses: .
+        continue-on-error: true
+        with:
+          cache-name: julia-cache;workflow=test;job=save-on-success
+          save-always: 'false'
+      - name: Assert cache-key output is set
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"
+      - name: Assert cache-paths output is set
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-paths is set"
+      - name: Assert cache-key contains expected prefix
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "julia-cache"; then
+            echo "FAIL: cache-key should contain 'julia-cache'"
+            exit 1
+          fi
+          echo "PASS: cache-key contains expected prefix"

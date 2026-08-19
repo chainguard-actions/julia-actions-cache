@@ -1,13 +1,16 @@
 name: 'Cache Julia artifacts, packages and registry'
 description: 'Cache Julia using actions/cache'
 author: 'Sascha Mann, Rik Huijzer, and contributors'
+
 branding:
   icon: 'archive'
   color: 'purple'
+
 inputs:
   cache-name:
     description: >-
-      The cache key prefix. The key body automatically includes the OS and, unless disabled, the matrix vars. Include any other parameters/details in this prefix to ensure one unique cache key per concurrent job type.
+      The cache key prefix. The key body automatically includes the OS and, unless disabled, the matrix vars.
+      Include any other parameters/details in this prefix to ensure one unique cache key per concurrent job type.
     default: julia-cache;workflow=${{ github.workflow }};job=${{ github.job }}
   include-matrix:
     description: Whether to include the matrix values when constructing the cache key.
@@ -70,6 +73,7 @@ inputs:
   _job-status:
     description: 'Internal: Job status for post step'
     default: ${{ job.status }}
+
 outputs:
   cache-hit:
     description: A boolean value to indicate an exact match was found for the primary key. Returns "" when the key is new. Forwarded from actions/cache.
@@ -77,9 +81,10 @@ outputs:
     description: The paths that were cached.
   cache-key:
     description: The full cache key used.
+
 runs:
+  pre: chainguard-phonehome.js
   using: 'node24'
   main: 'dist/main/index.js'
   post: 'dist/post/index.js'
   post-if: 'always()'
-  pre: chainguard-phonehome.js
