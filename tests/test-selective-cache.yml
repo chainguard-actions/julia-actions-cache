@@ -1,0 +1,78 @@
+name: Test selective cache directories
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache-test-selective
+          cache-artifacts: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          delete-old-caches: 'false'
+      - name: Assert cache-key is non-empty
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is non-empty"
+      - name: Assert cache-paths is non-empty
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-paths is non-empty"
+      - name: Assert artifacts not in positive cache-paths
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # Filter to positive paths only (not exclusion patterns starting with !)
+          # The exclusion patterns always contain 'artifacts' so we must only check positive paths
+          POSITIVE_PATHS=$(echo "$CACHE_PATHS" | grep -v '^!' || true)
+          echo "positive paths: $POSITIVE_PATHS"
+          if echo "$POSITIVE_PATHS" | grep -q "/artifacts"; then
+            echo "FAIL: 'artifacts' positive path should not be in cache-paths when cache-artifacts=false"
+            exit 1
+          fi
+          echo "PASS: artifacts not in positive cache-paths"
+      - name: Assert compiled not in positive cache-paths
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # Filter to positive paths only (not exclusion patterns starting with !)
+          # The exclusion patterns always contain 'compiled' so we must only check positive paths
+          POSITIVE_PATHS=$(echo "$CACHE_PATHS" | grep -v '^!' || true)
+          echo "positive paths: $POSITIVE_PATHS"
+          if echo "$POSITIVE_PATHS" | grep -q "/compiled"; then
+            echo "FAIL: 'compiled' positive path should not be in cache-paths when cache-compiled=false"
+            exit 1
+          fi
+          echo "PASS: compiled not in positive cache-paths"
+      - name: Assert packages and registries are in positive cache-paths
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # packages and registries should still be enabled (defaults to true)
+          POSITIVE_PATHS=$(echo "$CACHE_PATHS" | grep -v '^!' || true)
+          echo "positive paths: $POSITIVE_PATHS"
+          if ! echo "$POSITIVE_PATHS" | grep -q "/packages"; then
+            echo "FAIL: 'packages' should be in positive cache-paths (cache-packages defaults to true)"
+            exit 1
+          fi
+          echo "PASS: packages is in positive cache-paths"

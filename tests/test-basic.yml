@@ -1,0 +1,57 @@
+name: Test basic cache usage
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache-test-basic
+          delete-old-caches: 'false'
+      - name: Assert cache-key is non-empty
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is non-empty"
+      - name: Assert cache-paths is non-empty
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-paths is non-empty"
+      - name: Assert cache-key contains cache-name prefix
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "julia-cache-test-basic"; then
+            echo "FAIL: cache-key should contain the cache-name prefix"
+            exit 1
+          fi
+          echo "PASS: cache-key contains cache-name prefix"
+      - name: Assert cache-paths contains default depot paths
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # The cache-paths should contain positive (non-exclusion) paths for the default enabled caches
+          # Filter out lines starting with ! (exclusion patterns) and check remaining lines
+          POSITIVE_PATHS=$(echo "$CACHE_PATHS" | grep -v '^!' || true)
+          echo "positive paths: $POSITIVE_PATHS"
+          if [ -z "$POSITIVE_PATHS" ]; then
+            echo "FAIL: cache-paths should contain at least one positive (non-exclusion) path"
+            exit 1
+          fi
+          echo "PASS: cache-paths contains positive paths"

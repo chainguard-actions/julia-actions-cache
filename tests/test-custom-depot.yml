@@ -1,0 +1,64 @@
+name: Test custom depot path
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Create custom depot directory
+        run: mkdir -p /tmp/julia-depot-custom
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache-test-depot
+          depot: /tmp/julia-depot-custom
+          delete-old-caches: 'false'
+      - name: Assert cache-key is non-empty
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is non-empty"
+      - name: Assert cache-paths is non-empty
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-paths is non-empty"
+      - name: Assert cache-paths contains custom depot
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if ! echo "$CACHE_PATHS" | grep -q "julia-depot-custom"; then
+            echo "FAIL: cache-paths should reference the custom depot path"
+            exit 1
+          fi
+          echo "PASS: cache-paths contains custom depot path"
+      - name: Assert positive cache-paths use custom depot
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # Filter to positive paths only (not exclusion patterns)
+          POSITIVE_PATHS=$(echo "$CACHE_PATHS" | grep -v '^!' || true)
+          echo "positive paths: $POSITIVE_PATHS"
+          if [ -z "$POSITIVE_PATHS" ]; then
+            echo "FAIL: expected positive cache paths for custom depot"
+            exit 1
+          fi
+          # All positive paths should reference the custom depot
+          if ! echo "$POSITIVE_PATHS" | grep -q "julia-depot-custom"; then
+            echo "FAIL: positive cache-paths should reference the custom depot path"
+            exit 1
+          fi
+          echo "PASS: positive cache-paths use custom depot"

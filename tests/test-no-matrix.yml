@@ -1,0 +1,56 @@
+name: Test cache without matrix in key
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - id: cache
+        uses: .
+        with:
+          cache-name: julia-cache-test-no-matrix
+          include-matrix: 'false'
+          delete-old-caches: 'false'
+      - name: Assert cache-key is non-empty
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is non-empty"
+      - name: Assert cache-paths is non-empty
+        env:
+          CACHE_PATHS: ${{ steps.cache.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-paths is non-empty"
+      - name: Assert cache-key contains cache-name prefix
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+          CACHE_NAME: julia-cache-test-no-matrix
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "$CACHE_NAME"; then
+            echo "FAIL: cache-key should contain the cache-name prefix"
+            exit 1
+          fi
+          echo "PASS: cache-key contains cache-name prefix"
+      - name: Assert cache-key contains OS
+        env:
+          CACHE_KEY: ${{ steps.cache.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          # The cache key should contain os= since include-matrix=false but OS is always included
+          if ! echo "$CACHE_KEY" | grep -q "os="; then
+            echo "FAIL: cache-key should contain os= component"
+            exit 1
+          fi
+          echo "PASS: cache-key contains os= component"
