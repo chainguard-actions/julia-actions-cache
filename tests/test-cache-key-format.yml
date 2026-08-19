@@ -1,0 +1,63 @@
+name: Test cache key format
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_REF: refs/heads/feature-branch
+      GITHUB_EVENT_NAME: push
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        with:
+          cache-name: my-custom-prefix
+          depot: /tmp/keyformat-julia-depot
+          include-matrix: 'false'
+          delete-old-caches: 'false'
+
+      - name: Assert cache-key contains custom prefix
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "my-custom-prefix"; then
+            echo "FAIL: cache-key does not contain custom prefix 'my-custom-prefix'"
+            exit 1
+          fi
+          echo "PASS: cache-key contains custom prefix"
+
+      - name: Assert cache-key contains OS
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -qi "os="; then
+            echo "FAIL: cache-key does not contain OS component"
+            exit 1
+          fi
+          echo "PASS: cache-key contains OS component"
+
+      - name: Assert cache-key contains run_id
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "run_id="; then
+            echo "FAIL: cache-key does not contain run_id"
+            exit 1
+          fi
+          echo "PASS: cache-key contains run_id"
+
+      - name: Assert cache-key contains run_attempt
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "run_attempt="; then
+            echo "FAIL: cache-key does not contain run_attempt"
+            exit 1
+          fi
+          echo "PASS: cache-key contains run_attempt"

@@ -1,0 +1,56 @@
+name: Test JULIA_DEPOT_PATH environment variable
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      JULIA_DEPOT_PATH: /tmp/julia-env-depot:/tmp/julia-env-depot-secondary
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Create depot directories
+        run: |
+          mkdir -p /tmp/julia-env-depot
+          mkdir -p /tmp/julia-env-depot-secondary
+
+      - id: action
+        uses: .
+        with:
+          cache-name: julia-cache-test-env-depot
+          delete-old-caches: 'false'
+
+      - name: Assert cache-paths uses first JULIA_DEPOT_PATH entry
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # The action should use the first entry from JULIA_DEPOT_PATH
+          if ! echo "$CACHE_PATHS" | grep -q "/tmp/julia-env-depot/"; then
+            echo "FAIL: cache-paths does not reference first JULIA_DEPOT_PATH entry '/tmp/julia-env-depot/'"
+            exit 1
+          fi
+          echo "PASS: cache-paths references first JULIA_DEPOT_PATH entry"
+
+      - name: Assert cache-paths does not use second JULIA_DEPOT_PATH entry
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          # Only the first depot path should be used
+          if echo "$CACHE_PATHS" | grep -q "julia-env-depot-secondary"; then
+            echo "FAIL: cache-paths should not reference secondary JULIA_DEPOT_PATH entry"
+            exit 1
+          fi
+          echo "PASS: cache-paths does not reference secondary JULIA_DEPOT_PATH entry"
+
+      - name: Assert cache-key is set
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"

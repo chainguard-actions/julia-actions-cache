@@ -1,0 +1,59 @@
+name: Test cache key without matrix values
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        with:
+          cache-name: julia-cache-test-no-matrix
+          include-matrix: 'false'
+          delete-old-caches: 'false'
+
+      - name: Assert cache-key is set
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"
+
+      - name: Assert cache-key contains expected prefix
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "julia-cache-test-no-matrix"; then
+            echo "FAIL: cache-key does not contain expected prefix 'julia-cache-test-no-matrix'"
+            exit 1
+          fi
+          echo "PASS: cache-key contains expected prefix"
+
+      - name: Assert cache-key contains run_id
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if ! echo "$CACHE_KEY" | grep -q "run_id="; then
+            echo "FAIL: cache-key does not contain 'run_id='"
+            exit 1
+          fi
+          echo "PASS: cache-key contains run_id"
+
+      - name: Assert cache-paths output is set
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if [ -z "$CACHE_PATHS" ]; then
+            echo "FAIL: cache-paths output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-paths is set"

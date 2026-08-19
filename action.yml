@@ -134,14 +134,13 @@ runs:
         if [ "$INPUT_INCLUDE_MATRIX" == "true" ] && [ "$MATRIX_JSON" != "null" ]; then
           matrix_key=$(echo "$MATRIX_JSON" | jq 'paths(type != "object") as $p | ($p | join("-")) + "=" + (getpath($p) | tostring)' | jq -rs 'join(";") | . + ";"')
         fi
-        safe_cache_name=$(printf '%s' "$INPUT_CACHE_NAME" | tr -d '\n\r')
-        restore_key="${safe_cache_name};os=$RUNNER_OS;${matrix_key}"
+        restore_key="${INPUT_CACHE_NAME};os=${RUNNER_OS};${matrix_key}"
         # URL encode any restricted characters:
         # https://github.com/actions/toolkit/blob/5430c5d84832076372990c7c27f900878ff66dc9/packages/cache/src/cache.ts#L38-L43
         restore_key=$(sed 's/,/%2C/g' <<< "${restore_key}")
-        safe_restore_key=$(printf '%s' "${restore_key}" | tr -d '\n\r')
-        key="${safe_restore_key}run_id=${GITHUB_RUN_ID};run_attempt=${GITHUB_RUN_ATTEMPT}"
-        safe_key=$(printf '%s' "${key}" | tr -d '\n\r')
+        key="${restore_key}run_id=${GITHUB_RUN_ID};run_attempt=${GITHUB_RUN_ATTEMPT}"
+        safe_restore_key=$(printf '%s' "$restore_key" | tr -d '\n\r')
+        safe_key=$(printf '%s' "$key" | tr -d '\n\r')
         echo "restore-key=${safe_restore_key}" >> "$GITHUB_OUTPUT"
         echo "key=${safe_key}" >> "$GITHUB_OUTPUT"
       shell: bash
@@ -162,11 +161,11 @@ runs:
     # for other julia actions to check, like https://github.com/julia-actions/julia-buildpkg/pull/41
     - name: make depot if not restored, then list depot directory sizes
       run: |
-        mkdir -p "$DEPOT_PATH_OUTPUT"
-        du -shc "$DEPOT_PATH_OUTPUT"/* || true
+        mkdir -p "$STEP_DEPOT"
+        du -shc "$STEP_DEPOT"/* || true
       shell: bash
       env:
-        DEPOT_PATH_OUTPUT: ${{ steps.paths.outputs.depot }}
+        STEP_DEPOT: ${{ steps.paths.outputs.depot }}
     # issue https://github.com/julia-actions/cache/issues/110
     # Pkg may not run `Registry.update()` if a manifest exists, which may exist because of a
     # `Pkg.dev` call or because one is added to the repo. So be safe and update cached registries here.
@@ -176,7 +175,7 @@ runs:
       if: ${{ inputs.cache-registries == 'true' }}
       continue-on-error: true
       run: |
-        if [ -d "$DEPOT_PATH_OUTPUT/registries" ] && [ -n "$(ls -A "$DEPOT_PATH_OUTPUT/registries")" ]; then
+        if [ -d "$STEP_DEPOT/registries" ] && [ -n "$(ls -A "$STEP_DEPOT/registries")" ]; then
           echo "Registries directory exists and is non-empty. Updating any registries"
           julia -e "import Pkg; isdefined(Pkg, :Registry) && Pkg.Registry.update();"
         else
@@ -184,7 +183,7 @@ runs:
         fi
       shell: bash
       env:
-        DEPOT_PATH_OUTPUT: ${{ steps.paths.outputs.depot }}
+        STEP_DEPOT: ${{ steps.paths.outputs.depot }}
     # GitHub actions cache entries are immutable and cannot be updated. In order to have both the Julia
     # depot cache be up-to-date and avoid storing redundant cache entries we'll manually cleanup old
     # cache entries before the new cache is saved. However, we need to be careful with our manual
@@ -208,27 +207,29 @@ runs:
         # seems like there has to be a `main` step in this action. Could list caches for info if we wanted
         # main:  julia ${{ github.action_path }}/handle_caches.jl "${{ github.repository }}" "list"
         main: echo ""
-        post: julia $GITHUB_ACTION_PATH/handle_caches.jl rm "$CACHE_REPOSITORY" "$CACHE_RESTORE_KEY" "$CACHE_REF" "$CACHE_DELETE_NON_REQUIRED"
+        post: julia $GITHUB_ACTION_PATH/handle_caches.jl rm "$STEP_REPOSITORY" "$STEP_RESTORE_KEY" "$STEP_REF" "$STEP_DELETE_OLD"
       env:
         GH_TOKEN: ${{ inputs.token }}
-        CACHE_REPOSITORY: ${{ github.repository }}
-        CACHE_RESTORE_KEY: ${{ steps.keys.outputs.restore-key }}
-        CACHE_REF: ${{ github.ref }}
-        CACHE_DELETE_NON_REQUIRED: ${{ inputs.delete-old-caches != 'required' }}
+        STEP_REPOSITORY: ${{ github.repository }}
+        STEP_RESTORE_KEY: ${{ steps.keys.outputs.restore-key }}
+        STEP_REF: ${{ github.ref }}
+        STEP_DELETE_OLD: ${{ inputs.delete-old-caches != 'required' }}
     # Windows (because this action uses command prompt on windows)
     - uses: pyTooling/Actions/with-post-step@42e17fae05f224e5ac3d79d021a4e3577878efe5 # v4.2.2
       if: ${{ inputs.delete-old-caches != 'false' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch) && runner.OS == 'Windows' }}
       with:
         main: echo ""
-        post: cd %GITHUB_ACTION_PATH% && julia handle_caches.jl rm "%CACHE_REPOSITORY%" "%CACHE_RESTORE_KEY%" "%CACHE_REF%" "%CACHE_DELETE_NON_REQUIRED%"
+        post: cd %GITHUB_ACTION_PATH% && julia handle_caches.jl rm "%STEP_REPOSITORY%" "%STEP_RESTORE_KEY%" "%STEP_REF%" "%STEP_DELETE_OLD%"
       env:
         GH_TOKEN: ${{ inputs.token }}
-        CACHE_REPOSITORY: ${{ github.repository }}
-        CACHE_RESTORE_KEY: ${{ steps.keys.outputs.restore-key }}
-        CACHE_REF: ${{ github.ref }}
-        CACHE_DELETE_NON_REQUIRED: ${{ inputs.delete-old-caches != 'required' }}
+        STEP_REPOSITORY: ${{ github.repository }}
+        STEP_RESTORE_KEY: ${{ steps.keys.outputs.restore-key }}
+        STEP_REF: ${{ github.ref }}
+        STEP_DELETE_OLD: ${{ inputs.delete-old-caches != 'required' }}
     - id: hit
-      run: echo "cache-hit=$CACHE_HIT" >> $GITHUB_OUTPUT
+      run: |
+        safe_cache_hit=$(printf '%s' "$CACHE_HIT" | tr -d '\n\r')
+        echo "cache-hit=$safe_cache_hit" >> "$GITHUB_OUTPUT"
       env:
         CACHE_HIT: ${{ steps.cache.outputs.cache-hit }}
       shell: bash

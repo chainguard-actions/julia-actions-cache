@@ -1,0 +1,98 @@
+name: Test selective caching (disable some directories)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - id: action
+        uses: .
+        with:
+          cache-name: julia-cache-test-selective
+          cache-artifacts: 'false'
+          cache-compiled: 'false'
+          cache-scratchspaces: 'false'
+          cache-logs: 'false'
+          # Only cache packages and registries
+          cache-packages: 'true'
+          cache-registries: 'true'
+          delete-old-caches: 'false'
+
+      - name: Assert cache-paths does not include artifacts
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "/artifacts"; then
+            echo "FAIL: cache-paths should not contain 'artifacts' when cache-artifacts=false"
+            exit 1
+          fi
+          echo "PASS: artifacts not in cache-paths"
+
+      - name: Assert cache-paths does not include compiled
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "/compiled"; then
+            echo "FAIL: cache-paths should not contain 'compiled' when cache-compiled=false"
+            exit 1
+          fi
+          echo "PASS: compiled not in cache-paths"
+
+      - name: Assert cache-paths does not include scratchspaces
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "/scratchspaces"; then
+            echo "FAIL: cache-paths should not contain 'scratchspaces' when cache-scratchspaces=false"
+            exit 1
+          fi
+          echo "PASS: scratchspaces not in cache-paths"
+
+      - name: Assert cache-paths does not include logs
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if echo "$CACHE_PATHS" | grep -q "/logs"; then
+            echo "FAIL: cache-paths should not contain 'logs' when cache-logs=false"
+            exit 1
+          fi
+          echo "PASS: logs not in cache-paths"
+
+      - name: Assert cache-paths includes packages
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if ! echo "$CACHE_PATHS" | grep -q "/packages"; then
+            echo "FAIL: cache-paths should contain 'packages' when cache-packages=true"
+            exit 1
+          fi
+          echo "PASS: packages in cache-paths"
+
+      - name: Assert cache-paths includes registries
+        env:
+          CACHE_PATHS: ${{ steps.action.outputs.cache-paths }}
+        run: |
+          echo "cache-paths: $CACHE_PATHS"
+          if ! echo "$CACHE_PATHS" | grep -q "/registries"; then
+            echo "FAIL: cache-paths should contain 'registries' when cache-registries=true"
+            exit 1
+          fi
+          echo "PASS: registries in cache-paths"
+
+      - name: Assert cache-key is set
+        env:
+          CACHE_KEY: ${{ steps.action.outputs.cache-key }}
+        run: |
+          echo "cache-key: $CACHE_KEY"
+          if [ -z "$CACHE_KEY" ]; then
+            echo "FAIL: cache-key output is empty"
+            exit 1
+          fi
+          echo "PASS: cache-key is set"
