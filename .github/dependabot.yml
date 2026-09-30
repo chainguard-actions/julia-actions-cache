@@ -1,0 +1,27 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # Cooldown applies only to version updates, not security updates.
+    # https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cooldown-
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 99
+    labels:
+      - "dependencies"
+      - "github-actions"
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    # Cooldown applies only to version updates, not security updates.
+    # https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference#cooldown-
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 99
+    labels:
+      - "dependencies"
+      - "javascript"
