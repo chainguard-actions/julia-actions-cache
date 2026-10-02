@@ -58,7 +58,7 @@ runs:
   using: 'composite'
   steps:
     - name: Install jq
-      uses: dcarbone/install-jq-action@f0e10f46ff84f4d32178b4b76e1ef180b16f82c3 # v3.1.1
+      uses: chainguard-actions/dcarbone-install-jq-action@252e654f4a6c0029736f0b0fbe319c4d30bbfc58 # v3.1.1
       with:
         force: false  # Skip install when an existing `jq` is present
 
@@ -197,7 +197,7 @@ runs:
     # - https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#usage-limits-and-eviction-policy
 
     # Not windows
-    - uses: pyTooling/Actions/with-post-step@42e17fae05f224e5ac3d79d021a4e3577878efe5 # v4.2.2
+    - uses: chainguard-actions/pytooling-actions/with-post-step@2dd324053c9cf827faecf0f556b56e729bf1e704 # v4.2.2
       if: ${{ inputs.delete-old-caches != 'false' &&
               github.ref != format('refs/heads/{0}', github.event.repository.default_branch) &&
               runner.OS != 'Windows' }}
@@ -214,7 +214,7 @@ runs:
         POST_DELETE_NON_REQUIRED: ${{ inputs.delete-old-caches != 'required' }}
 
     # Windows (because this action uses command prompt on windows)
-    - uses: pyTooling/Actions/with-post-step@42e17fae05f224e5ac3d79d021a4e3577878efe5 # v4.2.2
+    - uses: chainguard-actions/pytooling-actions/with-post-step@2dd324053c9cf827faecf0f556b56e729bf1e704 # v4.2.2
       if: ${{ inputs.delete-old-caches != 'false' &&
               github.ref != format('refs/heads/{0}', github.event.repository.default_branch) &&
               runner.OS == 'Windows' }}
