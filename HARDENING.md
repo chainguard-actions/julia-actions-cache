@@ -10,52 +10,57 @@
 
 **Harden Agent Version:** `2`
 
-Action **julia-actions--cache/v2.1.0** was hardened automatically. 13 finding(s) were identified and resolved across 3 iteration(s).
+Action **julia-actions--cache/v2.1.0** was hardened automatically. 16 finding(s) were identified and resolved across 3 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Multiple `run:` blocks in action.yml directly interpolate `${{ ... }}` expressions inside shell command strings (rule a), allowing script injection. Affected steps:
-
-1. `paths` step: interpolates `${{ inputs.depot }}` directly in shell (e.g. `if [ -n "${{ inputs.depot }}" ]` and `depot="${{ inputs.depot }}"`), and `${{ inputs.cache-artifacts }}`, `${{ inputs.cache-packages }}`, `${{ inputs.cache-registries }}`, `${{ inputs.cache-compiled }}`, `${{ inputs.cache-scratchspaces }}`, `${{ inputs.cache-logs }}` in conditional expressions.
-
-2. `Generate Keys` step: interpolates `${{ inputs.include-matrix }}`, `${{ inputs.cache-name }}`, `${{ runner.os }}`, `${{ github.run_id }}`, `${{ github.run_attempt }}` directly in shell (e.g. `restore_key="${{ inputs.cache-name }};os=${{ runner.os }};..."`).
-
-3. `make depot if not restored` step: interpolates `${{ steps.paths.outputs.depot }}` directly in shell commands (`mkdir -p ${{ steps.paths.outputs.depot }}` and `du -shc ${{ steps.paths.outputs.depot }}/*`).
-
-4. `Update any cached registries` step: interpolates `${{ steps.paths.outputs.depot }}` directly in shell (`if [ -d "${{ steps.paths.outputs.depot }}/registries" ]`).
-
-All of these should be moved to `env:` variables and then referenced as quoted `"$VAR"` in the shell.
+Rule (a): The `paths` step directly interpolates `${{ inputs.depot }}`, `${{ inputs.cache-artifacts }}`, `${{ inputs.cache-packages }}`, `${{ inputs.cache-registries }}`, `${{ inputs.cache-compiled }}`, `${{ inputs.cache-scratchspaces }}`, and `${{ inputs.cache-logs }}` inside `run:` shell commands. These expressions are substituted by the Actions runner before the shell sees them, allowing an attacker-controlled input to inject arbitrary shell metacharacters. Example offending lines: `if [ -n "${{ inputs.depot }}" ]; then` and `depot="${{ inputs.depot }}"`.
 
 Locations:
 
-- `action.yml:61`
-- `action.yml:79`
-- `action.yml:96`
+- `action.yml:63`
+
+### script-injection (severity: high)
+
+Rule (a): The `Generate Keys` step directly interpolates `${{ inputs.include-matrix }}`, `${{ inputs.cache-name }}`, `${{ runner.os }}`, `${{ github.run_id }}`, and `${{ github.run_attempt }}` inside `run:` shell commands. Example offending lines: `if [ "${{ inputs.include-matrix }}" == "true" ]`, `restore_key="${{ inputs.cache-name }};os=${{ runner.os }};${matrix_key}"`, and `key="${restore_key}run_id=${{ github.run_id }};run_attempt=${{ github.run_attempt }}"`.
+
+Locations:
+
 - `action.yml:107`
+
+### script-injection (severity: high)
+
+Rule (a): The `make depot if not restored, then list depot directory sizes` step directly interpolates `${{ steps.paths.outputs.depot }}` inside `run:` shell commands. Offending lines: `mkdir -p ${{ steps.paths.outputs.depot }}` and `du -shc ${{ steps.paths.outputs.depot }}/* || true`. The `steps.*.outputs.*` context is workflow-controllable and must not be interpolated directly into shell.
+
+Locations:
+
+- `action.yml:148`
+
+### script-injection (severity: high)
+
+Rule (a): The `Update any cached registries` step directly interpolates `${{ steps.paths.outputs.depot }}` inside `run:` shell commands. Offending line: `if [ -d "${{ steps.paths.outputs.depot }}/registries" ] && [ -n "$(ls -A "${{ steps.paths.outputs.depot }}/registries")" ]; then`. The `steps.*.outputs.*` context is workflow-controllable and must not be interpolated directly into shell.
+
+Locations:
+
+- `action.yml:160`
 
 ### github-env-injection (severity: high)
 
-Two `run:` blocks in action.yml write values derived from untrusted inputs to `$GITHUB_OUTPUT` without the required sanitization step (`printf '%s' ... | tr -d '\n\r'`):
-
-1. `paths` step: `depot` is set from `${{ inputs.depot }}` (attacker-controlled) and then written unsanitized: `echo "depot=$depot" | tee -a "$GITHUB_OUTPUT"`. A newline in `inputs.depot` could inject additional key=value pairs into GITHUB_OUTPUT.
-
-2. `Generate Keys` step: `restore_key` is built from `${{ inputs.cache-name }}` (attacker-controlled) and written unsanitized: `echo "restore-key=${restore_key}" >> $GITHUB_OUTPUT` and `echo "key=${key}" >> $GITHUB_OUTPUT`. A newline in `inputs.cache-name` could inject additional entries into GITHUB_OUTPUT.
+The `paths` step writes the `depot` variable to `$GITHUB_OUTPUT` via `echo "depot=$depot" | tee -a "$GITHUB_OUTPUT"` without sanitization. The `depot` variable is derived directly from `${{ inputs.depot }}` (an attacker-controlled input) interpolated earlier in the same script. No `printf '%s' ... | tr -d '\n\r'` sanitization is applied before the write, allowing newline injection into the output file which could poison subsequent steps' environment.
 
 Locations:
 
-- `action.yml:61`
 - `action.yml:79`
 
-### unpinned-uses (severity: high)
+### github-env-injection (severity: high)
 
-The workflow file references `julia-actions/setup-julia@v2` using a mutable tag (`v2`) instead of a full 40-character commit SHA. This means the action could be silently updated to a malicious version without any change to the workflow file. The reference appears twice (in the `test-save` and `test-restore` jobs).
+The `Generate Keys` step writes `restore_key` and `key` to `$GITHUB_OUTPUT` via `echo "restore-key=${restore_key}" >> $GITHUB_OUTPUT` and `echo "key=${key}" >> $GITHUB_OUTPUT` without sanitization. Both variables are derived from `${{ inputs.cache-name }}` (an attacker-controlled input) interpolated directly into the shell string. No `printf '%s' ... | tr -d '\n\r'` sanitization is applied before the writes, allowing newline injection into the output file.
 
 Locations:
 
-- `.github/workflows/CI.yml:65`
-- `.github/workflows/CI.yml:108`
+- `action.yml:114`
 
 ### static-inline-injection (severity: high)
 
@@ -141,39 +146,37 @@ Locations:
 
 ### Iteration 1
 
-**Fixes applied:** script-injection, static-inline-injection, github-env-injection, unpinned-uses
+**Fixes applied:** script-injection, github-env-injection, static-inline-injection
 
 **Notes:**
 
-Fixed all findings in action.yml and .github/workflows/CI.yml:
+Fixed all script-injection and github-env-injection findings in action.yml:
 
-1. **script-injection / static-inline-injection** (action.yml): Moved all ${{ inputs.* }} expressions out of run: blocks into env: blocks. Specifically:
-   - `paths` step: INPUT_DEPOT, INPUT_CACHE_ARTIFACTS, INPUT_CACHE_PACKAGES, INPUT_CACHE_REGISTRIES, INPUT_CACHE_COMPILED, INPUT_CACHE_SCRATCHSPACES, INPUT_CACHE_LOGS all moved to env: and referenced as $VAR in shell.
-   - `Generate Keys` step: INPUT_INCLUDE_MATRIX, INPUT_CACHE_NAME moved to env:; ${{ runner.os }} moved to RUNNER_OS env var; ${{ github.run_id }} and ${{ github.run_attempt }} replaced with built-in $GITHUB_RUN_ID and $GITHUB_RUN_ATTEMPT env vars.
-   - `make depot if not restored` step: ${{ steps.paths.outputs.depot }} moved to STEP_DEPOT env var.
-   - `Update any cached registries` step: ${{ steps.paths.outputs.depot }} moved to STEP_DEPOT env var.
+1. paths step: Moved all ${{ inputs.* }} expressions (depot, cache-artifacts, cache-packages, cache-registries, cache-compiled, cache-scratchspaces, cache-logs) to env: block as INPUT_DEPOT, INPUT_CACHE_ARTIFACTS, etc. Added newline sanitization (printf '%s' | tr -d '\n\r') before writing depot to $GITHUB_OUTPUT.
 
-2. **github-env-injection** (action.yml): Added `printf '%s' "$VAR" | tr -d '\n\r'` sanitization before writing to $GITHUB_OUTPUT for both the `depot` value (paths step) and `restore-key`/`key` values (Generate Keys step).
+2. Generate Keys step: Moved ${{ inputs.include-matrix }}, ${{ inputs.cache-name }}, ${{ runner.os }}, ${{ github.run_id }}, ${{ github.run_attempt }} to env: block as INPUT_INCLUDE_MATRIX, INPUT_CACHE_NAME, INPUT_RUNNER_OS, INPUT_RUN_ID, INPUT_RUN_ATTEMPT. Added newline sanitization for restore_key and key before writing to $GITHUB_OUTPUT.
 
-3. **unpinned-uses** (CI.yml): Pinned both occurrences of `julia-actions/setup-julia@v2` to full SHA `julia-actions/setup-julia@4c0cb0fce8556fdb04a90347310e5db8b1f98fb9 # v2`.
+3. make depot step: Moved ${{ steps.paths.outputs.depot }} to env: block as DEPOT_PATH_VAR, referenced as "$DEPOT_PATH_VAR" in shell.
+
+4. Update any cached registries step: Moved ${{ steps.paths.outputs.depot }} to env: block as DEPOT_PATH_VAR, referenced as "$DEPOT_PATH_VAR" in shell.
 
 ### Iteration 2
-
-**Fixes applied:** script-injection, github-env-injection
-
-**Notes:**
-
-Fixed all four findings:
-1. action.yml non-Windows pyTooling/with-post-step: Moved github.repository, steps.keys.outputs.restore-key, github.ref, and inputs.delete-old-caches expression into env vars (STEP_REPOSITORY, STEP_RESTORE_KEY, STEP_REF, STEP_DELETE_OLD); post: command now references $STEP_* env vars instead of ${{ }} expressions.
-2. action.yml Windows pyTooling/with-post-step: Same fix using %STEP_*% Windows cmd syntax.
-3. action.yml hit step: Added sanitization (printf '%s' "$CACHE_HIT" | tr -d '\n\r') before writing cache-hit to $GITHUB_OUTPUT.
-4. CI.yml three Set cache-name steps (test-save, test-save-nomatrix, test-save-cloned-registry): Moved ${{ needs.generate-prefix.outputs.cache-prefix }} and ${{ github.job }} into env vars (CACHE_PREFIX, JOB_NAME); sanitized the combined value with printf | tr -d '\n\r' before writing to $GITHUB_OUTPUT.
-
-### Iteration 3
 
 **Fixes applied:** script-injection
 
 **Notes:**
 
-Fixed unquoted variable expansion in the `paths` step of action.yml. Changed `depot=$(echo $JULIA_DEPOT_PATH | cut -d$PATH_DELIMITER -f1)` to `depot=$(echo "$JULIA_DEPOT_PATH" | cut -d"$PATH_DELIMITER" -f1)`. Both `$JULIA_DEPOT_PATH` (an inherited process env var that could be workflow-controllable) and `$PATH_DELIMITER` (set from a runner context expression) are now properly double-quoted, preventing shell metacharacters in their values from being interpreted by the shell.
+Fixed two script-injection findings in action.yml:
+
+1. Sub-rule (a) - Lines 196 and 210: Moved `${{ github.repository }}`, `${{ steps.keys.outputs.restore-key }}`, `${{ github.ref }}`, and `${{ inputs.delete-old-caches != 'required' }}` out of the `post:` field in both `pyTooling/Actions/with-post-step` steps (non-Windows and Windows) into the steps' `env:` blocks as `POST_REPOSITORY`, `POST_RESTORE_KEY`, `POST_REF`, and `POST_DELETE_NON_REQUIRED`. The `post:` commands now reference these as shell variables (`"$POST_REPOSITORY"` etc. on Linux/macOS, `"%POST_REPOSITORY%"` etc. on Windows cmd).
+
+2. Sub-rule (b) - Line 68: Added double quotes around `$JULIA_DEPOT_PATH` and `$PATH_DELIMITER` in the unquoted shell expansion `depot=$(echo $JULIA_DEPOT_PATH | cut -d$PATH_DELIMITER -f1)`, changing it to `depot=$(echo "$JULIA_DEPOT_PATH" | cut -d"$PATH_DELIMITER" -f1)` to prevent word splitting and glob expansion on the untrusted environment variable.
+
+### Iteration 3
+
+**Fixes applied:** github-env-injection
+
+**Notes:**
+
+Fixed the `hit` step in action.yml (line 232) to sanitize the CACHE_HIT value before writing to $GITHUB_OUTPUT. Changed from a direct `echo "cache-hit=$CACHE_HIT" >> $GITHUB_OUTPUT` to a two-step approach: first strip newlines/carriage-returns with `safe=$(printf '%s' "$CACHE_HIT" | tr -d '\n\r')`, then write `echo "cache-hit=$safe" >> "$GITHUB_OUTPUT"`. Also added proper quoting around `$GITHUB_OUTPUT`.
 
