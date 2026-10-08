@@ -1,0 +1,19 @@
+{
+  "status": "self_contained",
+  "entries": [
+    {
+      "path": "dist/main/index.js",
+      "status": "self_contained",
+      "warnings": [
+        "indirect-require: Indirect calls to \"require\" will not be bundled"
+      ]
+    },
+    {
+      "path": "dist/post/index.js",
+      "status": "self_contained",
+      "warnings": [
+        "indirect-require: Indirect calls to \"require\" will not be bundled"
+      ]
+    }
+  ]
+}
