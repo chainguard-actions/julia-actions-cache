@@ -16,6 +16,7 @@ Hardened by [Chainguard](https://www.chainguard.dev) from the upstream action at
 | v3.2.0 | [`v3.2.0`](https://github.com/chainguard-actions/julia-actions-cache/tree/v3.2.0) | [`b7788ab`](https://github.com/julia-actions/cache/commit/b7788abd52452d5bc033d69796e110d9906af4ab) |
 | v3.3.0 | [`v3.3.0`](https://github.com/chainguard-actions/julia-actions-cache/tree/v3.3.0) | [`a7bed9d`](https://github.com/julia-actions/cache/commit/a7bed9df697e5d7309d68afe7542a87621a8b6c8) |
 | v3.4.0 | [`v3.4.0`](https://github.com/chainguard-actions/julia-actions-cache/tree/v3.4.0) | [`e32267b`](https://github.com/julia-actions/cache/commit/e32267b41e0fa7df82a3d53e8c7273620d52c586) |
+| v3.5.0 | [`v3.5.0`](https://github.com/chainguard-actions/julia-actions-cache/tree/v3.5.0) | [`9353db0`](https://github.com/julia-actions/cache/commit/9353db09a0f2bbbdec6f41791918c75d37391b36) |
 
 ## Privacy
 
