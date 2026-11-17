@@ -4,8 +4,13 @@
   "version": "v3.3.0",
   "commit_sha": "a7bed9df697e5d7309d68afe7542a87621a8b6c8",
   "url": "https://github.com/julia-actions/cache",
-  "policy_sha": "d636be7e43ef829af6e853da6b3c7566db9f72fe",
+  "policy_sha": "374911c4be584df24e6da57af2d990570ef0f859",
   "test_policy_sha": "843adf9e4b8f85d0c08b27b9d0b09dd094b54702",
   "test_agent_version": "2",
-  "harden_agent_version": "2"
+  "harden_agent_version": "2",
+  "dist_artifact": {
+    "gcs_uri": "gs://patch-actions-node-artifacts/dist-artifacts/julia-actions/cache/v3.3.0/sha256-e00203200d97d15afbb22e8f6b06aa3697a67c0c9ee37171fb0c51fe35e3fcca.tar.gz",
+    "sha256": "e00203200d97d15afbb22e8f6b06aa3697a67c0c9ee37171fb0c51fe35e3fcca",
+    "size_bytes": 2293014
+  }
 }
